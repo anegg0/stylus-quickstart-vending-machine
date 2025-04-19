@@ -7,7 +7,6 @@
 //! Note: this code is a template-only and has not been audited.
 //!
 
-// Allow `cargo stylus export-abi` to generate a main function if the "export-abi" feature is enabled.
 #![cfg_attr(not(any(test, feature = "export-abi")), no_main)]
 extern crate alloc;
 
@@ -61,5 +60,56 @@ impl VendingMachine {
     }
     pub fn get_cupcake_balance_for(&self, user_address: Address) -> Result<U256, Vec<u8>> {
         Ok(self.cupcake_balances.get(user_address))
+    }
+}
+
+#[cfg(test)]
+mod test {
+    use super::*;
+    use alloy_primitives::address;
+    use stylus_sdk::testing::*;
+
+    #[test]
+    fn test_give_cupcake_to() {
+        let vm: TestVM = TestVMBuilder::new()
+            .sender(address!("dCE82b5f92C98F27F116F70491a487EFFDb6a2a9"))
+            .contract_address(address!("0x11b57fe348584f042e436c6bf7c3c3def171de49"))
+            .value(U256::from(1))
+            .build();
+        let mut contract = VendingMachine::from(&vm);
+        let user = address!("0xCDC41bff86a62716f050622325CC17a317f99404");
+        assert_eq!(contract.get_cupcake_balance_for(user).unwrap(), U256::ZERO);
+
+        vm.set_block_timestamp(vm.block_timestamp() + 6);
+
+        // Give a cupcake and verify it succeeds
+        assert!(contract.give_cupcake_to(user).unwrap());
+
+        // Check balance is now 1
+        assert_eq!(
+            contract.get_cupcake_balance_for(user).unwrap(),
+            U256::from(1)
+        );
+
+        // Try to give another cupcake immediately - should fail due to time restriction
+        assert!(!contract.give_cupcake_to(user).unwrap());
+
+        // Balance should still be 1
+        assert_eq!(
+            contract.get_cupcake_balance_for(user).unwrap(),
+            U256::from(1)
+        );
+
+        // Advance block timestamp by 6 seconds
+        vm.set_block_timestamp(vm.block_timestamp() + 6);
+
+        // Now giving a cupcake should succeed
+        assert!(contract.give_cupcake_to(user).unwrap());
+
+        // Balance should now be 2
+        assert_eq!(
+            contract.get_cupcake_balance_for(user).unwrap(),
+            U256::from(2)
+        );
     }
 }
